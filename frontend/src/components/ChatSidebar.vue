@@ -1,6 +1,6 @@
 <template>
   <!-- Sidebar -->
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-open': isOpen }">
     <!-- Logo / Brand -->
     <div class="sidebar-brand">
       <div class="brand-icon">
@@ -77,6 +77,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  isOpen: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 defineEmits(["quick-question"]);
@@ -131,6 +135,8 @@ async function handleIngest() {
   padding: 1.5rem 1rem;
   gap: 1.5rem;
   overflow-y: auto;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 50;
 }
 
 /* Brand */
@@ -312,5 +318,20 @@ async function handleIngest() {
 .sidebar-footer-text {
   font-size: 0.68rem;
   color: var(--color-text-muted);
+}
+
+/* Responsive (Off-canvas) */
+@media (max-width: 768px) {
+  .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+  .sidebar.is-open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+  }
 }
 </style>

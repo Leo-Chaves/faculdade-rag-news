@@ -1,15 +1,27 @@
 <template>
   <div class="app-shell">
     <!-- Sidebar -->
-    <ChatSidebar :loading="isLoading" @quick-question="sendMessage" />
+    <ChatSidebar :loading="isLoading" :is-open="isSidebarOpen" @quick-question="handleQuickQuestion" />
+
+    <!-- Mobile Overlay -->
+    <transition name="fade">
+      <div v-if="isSidebarOpen" class="mobile-overlay" @click="isSidebarOpen = false"></div>
+    </transition>
 
     <!-- Main chat area -->
     <main class="chat-main">
       <!-- Header -->
       <header class="chat-header">
         <div class="header-info">
+          <button class="icon-btn mobile-menu-btn" title="Menu" @click="isSidebarOpen = !isSidebarOpen">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
           <h1 class="header-title">Chat com Notícias</h1>
-          <span class="header-badge">RAG · LangChain · Groq</span>
+          <span class="header-badge">RAG · LangChain</span>
         </div>
         <div class="header-actions">
           <button class="icon-btn" :title="isDarkMode ? 'Modo Claro' : 'Modo Escuro'" @click="toggleTheme">
@@ -50,8 +62,7 @@
           </div>
           <h2 class="empty-title">Como posso ajudar?</h2>
           <p class="empty-sub">
-            Faça uma pergunta sobre as notícias ingeridas ou use uma das
-            <strong>Perguntas Rápidas</strong> na barra lateral.
+            Faça uma pergunta sobre as notícias ingeridas ou use o menu para acessar as <strong>Perguntas Rápidas</strong>.
           </p>
         </div>
 
@@ -81,7 +92,7 @@
             ref="inputRef"
             v-model="inputText"
             class="chat-input"
-            placeholder="Faça uma pergunta sobre as notícias..."
+            placeholder="Pergunte sobre as notícias..."
             rows="1"
             :disabled="isLoading"
             @keydown.enter.prevent="handleEnter"
@@ -99,7 +110,7 @@
             <span v-else class="spinner" />
           </button>
         </div>
-        <p class="input-hint">Enter para enviar · Shift+Enter para nova linha</p>
+        <p class="input-hint">Enter: enviar · Shift+Enter: quebrar linha</p>
       </footer>
     </main>
   </div>
@@ -121,6 +132,7 @@ const messagesContainer = ref(null);
 const inputRef = ref(null);
 
 const isDarkMode = ref(false);
+const isSidebarOpen = ref(false);
 
 onMounted(() => {
   const savedTheme = localStorage.getItem('theme');
@@ -144,6 +156,11 @@ function toggleTheme() {
     document.documentElement.classList.remove('dark');
     localStorage.setItem('theme', 'light');
   }
+}
+
+function handleQuickQuestion(text) {
+  isSidebarOpen.value = false;
+  sendMessage(text);
 }
 
 async function sendMessage(text) {
@@ -227,6 +244,15 @@ function resetTextareaHeight() {
   height: 100dvh;
   overflow: hidden;
   background: var(--color-bg-primary);
+  position: relative;
+}
+
+.mobile-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 40;
 }
 
 /* ── Main ────────────────────────────────────────────────────────────────── */
@@ -252,6 +278,9 @@ function resetTextareaHeight() {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+.mobile-menu-btn {
+  display: none; /* hidden on desktop */
 }
 .header-title {
   margin: 0;
@@ -474,9 +503,21 @@ function resetTextareaHeight() {
 }
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
-@media (max-width: 640px) {
-  .app-shell {
-    flex-direction: column;
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
+  .header-badge {
+    display: none; /* Hide badge on very small screens to save space */
+  }
+  .chat-header {
+    padding: 0.8rem 1rem;
+  }
+  .messages-area {
+    padding: 1rem 0.5rem;
+  }
+  .input-area {
+    padding: 0.75rem;
   }
 }
 </style>
