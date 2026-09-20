@@ -27,7 +27,6 @@
           :disabled="props.loading"
           @click="$emit('quick-question', q.text)"
         >
-          <span class="quick-btn-icon">{{ q.icon }}</span>
           <span class="quick-btn-text">{{ q.text }}</span>
         </button>
       </div>
@@ -83,11 +82,11 @@ const props = defineProps({
 defineEmits(["quick-question"]);
 
 const quickQuestions = [
-  { id: 1, icon: "📰", text: "Qual é a notícia mais recente?" },
-  { id: 2, icon: "💻", text: "Resumo de tecnologia hoje" },
-  { id: 3, icon: "🌍", text: "O que aconteceu no mundo?" },
-  { id: 4, icon: "💼", text: "Quais são as novidades de negócios?" },
-  { id: 5, icon: "🔬", text: "Novidades de ciência e meio ambiente" },
+  { id: 1, text: "Qual é a notícia mais recente?" },
+  { id: 2, text: "Resumo de tecnologia hoje" },
+  { id: 3, text: "O que aconteceu no mundo?" },
+  { id: 4, text: "Quais são as novidades de negócios?" },
+  { id: 5, text: "Novidades de ciência e meio ambiente" },
 ];
 
 const bbcFeeds = [
@@ -148,8 +147,8 @@ async function handleIngest() {
   justify-content: center;
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, var(--color-accent), #4f46e5);
-  border-radius: 10px;
+  background: var(--color-accent);
+  border-radius: 8px;
   color: white;
 }
 .brand-icon svg {
@@ -219,10 +218,6 @@ async function handleIngest() {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.quick-btn-icon {
-  font-size: 1rem;
-  flex-shrink: 0;
-}
 .quick-btn-text {
   line-height: 1.3;
 }
@@ -257,20 +252,18 @@ async function handleIngest() {
   gap: 0.5rem;
   width: 100%;
   padding: 0.6rem;
-  background: linear-gradient(135deg, var(--color-accent), #4f46e5);
+  background: var(--color-accent);
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: white;
   font-size: 0.82rem;
   font-weight: 600;
   font-family: "Inter", sans-serif;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: opacity 0.2s ease;
 }
 .ingest-btn:hover:not(:disabled) {
   opacity: 0.9;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--color-accent-glow);
 }
 .ingest-btn:disabled {
   opacity: 0.5;

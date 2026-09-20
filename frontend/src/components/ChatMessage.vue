@@ -101,10 +101,10 @@ function formatSource(url) {
   color: white;
 }
 .avatar.user {
-  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  background: var(--color-text-secondary);
 }
 .avatar.assistant {
-  background: linear-gradient(135deg, #0f766e, #0891b2);
+  background: var(--color-text-primary);
 }
 .avatar svg {
   width: 18px;
@@ -188,15 +188,12 @@ function formatSource(url) {
 }
 .source-link {
   font-size: 0.7rem;
-  color: var(--color-accent-light);
+  color: var(--color-text-muted);
   text-decoration: none;
-  padding: 1px 6px;
-  background: var(--color-accent-glow);
-  border-radius: 4px;
-  transition: opacity 0.15s;
+  transition: color 0.15s;
 }
 .source-link:hover {
-  opacity: 0.8;
+  color: var(--color-text-primary);
   text-decoration: underline;
 }
 </style>

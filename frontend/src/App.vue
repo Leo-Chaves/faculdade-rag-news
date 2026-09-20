@@ -11,14 +11,32 @@
           <h1 class="header-title">Chat com Notícias</h1>
           <span class="header-badge">RAG · LangChain · Groq</span>
         </div>
-        <button class="clear-btn" title="Limpar conversa" @click="clearChat">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-1 14H6L5 6" />
-            <path d="M10 11v6M14 11v6" />
-            <path d="M9 6V4h6v2" />
-          </svg>
-        </button>
+        <div class="header-actions">
+          <button class="icon-btn" :title="isDarkMode ? 'Modo Claro' : 'Modo Escuro'" @click="toggleTheme">
+            <svg v-if="!isDarkMode" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+          <button class="icon-btn" title="Limpar conversa" @click="clearChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14H6L5 6" />
+              <path d="M10 11v6M14 11v6" />
+              <path d="M9 6V4h6v2" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <!-- Messages -->
@@ -88,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from "vue";
+import { ref, nextTick, onMounted } from "vue";
 import axios from "axios";
 import ChatSidebar from "./components/ChatSidebar.vue";
 import ChatMessage from "./components/ChatMessage.vue";
@@ -102,10 +120,31 @@ const errorMessage = ref("");
 const messagesContainer = ref(null);
 const inputRef = ref(null);
 
+const isDarkMode = ref(false);
+
+onMounted(() => {
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    isDarkMode.value = true;
+    document.documentElement.classList.add('dark');
+  }
+});
+
 let msgCounter = 0;
 const uid = () => ++msgCounter;
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
+
+function toggleTheme() {
+  isDarkMode.value = !isDarkMode.value;
+  if (isDarkMode.value) {
+    document.documentElement.classList.add('dark');
+    localStorage.setItem('theme', 'dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem('theme', 'light');
+  }
+}
 
 async function sendMessage(text) {
   const question = (typeof text === "string" ? text : inputText.value).trim();
@@ -226,13 +265,18 @@ function resetTextareaHeight() {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--color-accent-light);
-  background: var(--color-accent-glow);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-card);
   padding: 2px 8px;
   border-radius: 99px;
-  border: 1px solid rgba(124, 58, 237, 0.3);
+  border: 1px solid var(--color-border);
 }
-.clear-btn {
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -245,12 +289,12 @@ function resetTextareaHeight() {
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.clear-btn:hover {
-  border-color: #ef4444;
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.08);
+.icon-btn:hover {
+  border-color: var(--color-text-muted);
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
 }
-.clear-btn svg {
+.icon-btn svg {
   width: 16px;
   height: 16px;
 }
@@ -359,8 +403,7 @@ function resetTextareaHeight() {
   transition: border-color 0.2s;
 }
 .input-wrapper:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-glow);
+  border-color: var(--color-text-muted);
 }
 .chat-input {
   flex: 1;
@@ -387,18 +430,16 @@ function resetTextareaHeight() {
   justify-content: center;
   width: 38px;
   height: 38px;
-  background: linear-gradient(135deg, var(--color-accent), #4f46e5);
+  background: var(--color-accent);
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: white;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all 0.2s ease;
+  transition: opacity 0.2s ease;
 }
 .send-btn:hover:not(:disabled) {
   opacity: 0.9;
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px var(--color-accent-glow);
 }
 .send-btn:disabled {
   opacity: 0.4;
