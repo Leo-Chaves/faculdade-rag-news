@@ -23,8 +23,6 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 # pyrefly: ignore [missing-import]
 from langchain_core.output_parsers import StrOutputParser
-# pyrefly: ignore [missing-import]
-from langchain_core.runnables import RunnablePassthrough
 
 
 def _load_dotenv_safe():
