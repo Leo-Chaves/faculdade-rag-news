@@ -73,7 +73,7 @@ POST /ingest
 #### Exemplo — `/chat`
 ```json
 POST /chat
-{ "question": "Qual a notícia mais recente sobre tecnologia?" }
+{ "question": "aconteceu algo no brasil?" }
 ```
 
 ---
