@@ -423,7 +423,7 @@ function resetTextareaHeight() {
 }
 .input-wrapper {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.6rem;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
@@ -459,6 +459,7 @@ function resetTextareaHeight() {
   justify-content: center;
   width: 38px;
   height: 38px;
+  align-self: flex-end;
   background: var(--color-accent);
   border: none;
   border-radius: 6px;
