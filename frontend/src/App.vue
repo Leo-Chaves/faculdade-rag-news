@@ -279,7 +279,7 @@ function resetTextareaHeight() {
   align-items: center;
   gap: 0.75rem;
 }
-.mobile-menu-btn {
+.icon-btn.mobile-menu-btn {
   display: none; /* hidden on desktop */
 }
 .header-title {
