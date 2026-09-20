@@ -61,10 +61,6 @@
       </p>
     </div>
 
-    <!-- Footer -->
-    <div class="sidebar-footer">
-      <span class="sidebar-footer-text">Projeto de Faculdade · IA Generativa</span>
-    </div>
   </aside>
 </template>
 

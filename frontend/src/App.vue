@@ -21,7 +21,6 @@
             </svg>
           </button>
           <h1 class="header-title">Chat com Notícias</h1>
-          <span class="header-badge">RAG · LangChain</span>
         </div>
         <div class="header-actions">
           <button class="icon-btn" :title="isDarkMode ? 'Modo Claro' : 'Modo Escuro'" @click="toggleTheme">
