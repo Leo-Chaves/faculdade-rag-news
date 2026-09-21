@@ -86,7 +86,7 @@ const quickQuestions = [
   { id: 2, text: "Quais são os planos de Donald Trump para o arco do triunfo?" },
   { id: 3, text: "O que Earl Spencer falou sobre a Princesa Diana na sua entrevista à BBC?" },
   { id: 4, text: "O que o Chanceler alemão Merz comentou sobre os resultados das eleições?" },
-  { id: 5, text: "Qual foi o pedido de Ed Davey sobre os impostos dos combustíveis?" },
+  { id: 5, text: "O que aconteceu no futebol hoje?" },
 ];
 
 const bbcFeeds = [
