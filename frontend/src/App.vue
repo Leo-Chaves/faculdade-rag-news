@@ -8,6 +8,35 @@
       <div v-if="isSidebarOpen" class="mobile-overlay" @click="isSidebarOpen = false"></div>
     </transition>
 
+    <!-- Disclaimer Modal -->
+    <transition name="fade">
+      <div v-if="showDisclaimer" class="modal-overlay" @click.self="closeDisclaimer">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>⚠️ Aviso de Limitações Técnicas</h3>
+            <button class="close-btn" @click="closeDisclaimer">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p>
+              Este projeto está hospedado no plano gratuito do <strong>Render</strong>, que possui um limite estrito de memória RAM (512MB).
+            </p>
+            <p>
+              Para que o sistema funcione sem estourar o limite de memória, tivemos que adotar um <strong>modelo de busca (Embeddings) mais leve e focado no inglês</strong>.
+            </p>
+            <p>
+              <strong>O que isso significa na prática?</strong><br>
+              As pesquisas no banco de dados de notícias terão resultados bem mais precisos e relevantes quando você fizer <strong>perguntas relacionadas às notícias em Inglês</strong>.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button class="primary-btn" @click="closeDisclaimer">Entendi</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
     <!-- Main chat area -->
     <main class="chat-main">
       <!-- Header -->
@@ -132,6 +161,7 @@ const inputRef = ref(null);
 
 const isDarkMode = ref(false);
 const isSidebarOpen = ref(false);
+const showDisclaimer = ref(false);
 
 onMounted(() => {
   const savedTheme = localStorage.getItem('theme');
@@ -139,7 +169,17 @@ onMounted(() => {
     isDarkMode.value = true;
     document.documentElement.classList.add('dark');
   }
+
+  // Verifica se o usuário já fechou o aviso anteriormente
+  if (!localStorage.getItem('disclaimer_seen')) {
+    showDisclaimer.value = true;
+  }
 });
+
+function closeDisclaimer() {
+  showDisclaimer.value = false;
+  localStorage.setItem('disclaimer_seen', 'true');
+}
 
 let msgCounter = 0;
 const uid = () => ++msgCounter;
@@ -252,6 +292,102 @@ function resetTextareaHeight() {
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(2px);
   z-index: 40;
+}
+
+/* ── Modal ───────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.modal-content {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--color-text-primary);
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+}
+
+.close-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.modal-body {
+  padding: 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.modal-body p {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.modal-body strong {
+  color: var(--color-text-primary);
+}
+
+.modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  background: var(--color-bg-secondary);
+}
+
+.primary-btn {
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.primary-btn:hover {
+  opacity: 0.9;
 }
 
 /* ── Main ────────────────────────────────────────────────────────────────── */
