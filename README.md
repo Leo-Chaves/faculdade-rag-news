@@ -1,5 +1,7 @@
 # 📰 RAG News — Chat com Notícias
 
+🔗 **Acesse o projeto online:** [https://ragnewsbbc.netlify.app/](https://ragnewsbbc.netlify.app/)
+
 Projeto de faculdade: sistema de **Retrieval-Augmented Generation (RAG)** para responder perguntas sobre notícias atuais, usando **LangChain**, **Groq** e **PGVector (Supabase)**.
 
 ---
