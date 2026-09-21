@@ -102,13 +102,14 @@ function formatSource(url) {
   height: 34px;
   border-radius: 50%;
   flex-shrink: 0;
-  color: white;
 }
 .avatar.user {
   background: var(--color-text-secondary);
+  color: var(--color-bg-primary);
 }
 .avatar.assistant {
   background: var(--color-text-primary);
+  color: var(--color-bg-primary);
 }
 .avatar svg {
   width: 18px;
