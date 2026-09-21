@@ -1,6 +1,7 @@
 import os
 import urllib.parse
 from pathlib import Path
+from routes.health import router as health_router
 # pyrefly: ignore [missing-import]
 import feedparser
 from fastapi import FastAPI, HTTPException
@@ -67,6 +68,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(health_router)
 
 # ---------------------------------------------------------------------------
 # BBC RSS Feeds (fixos no backend)
@@ -184,16 +186,6 @@ def _fetch_and_chunk_rss(urls: List[str]):
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
-
-
-@app.get("/", tags=["Health"])
-def root():
-    return {"status": "ok", "message": "RAG News API is running"}
-
-
-@app.get("/health", tags=["Health"])
-def health_check():
-    return {"status": "ok"}
 
 
 @app.post("/ingest", tags=["Ingestion"])
