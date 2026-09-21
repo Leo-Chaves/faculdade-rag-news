@@ -640,7 +640,7 @@ function resetTextareaHeight() {
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .mobile-menu-btn {
+  .icon-btn.mobile-menu-btn {
     display: flex;
   }
   .header-badge {
