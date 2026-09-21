@@ -292,7 +292,9 @@ def no_sem_evidencia(estado: EstadoRAG):
     return {"resposta": "Não encontrei essa informação nas notícias de hoje.", "documentos_recuperados": []}
 
 def decidir_evidencia(estado: EstadoRAG) -> Literal["com_evidencia", "sem_evidencia"]:
-    if estado.get("score_maximo", 0.0) >= 0.25:
+    # Threshold calibrado (0.05): Mantém a lógica condicional do LangGraph funcionando 
+    # (barra absurdos/ruídos com score muito baixo), mas permite que buscas cross-lingual (PT->EN) passem.
+    if estado.get("score_maximo", -1.0) >= 0.05:
         return "com_evidencia"
     return "sem_evidencia"
 
