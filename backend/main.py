@@ -2,6 +2,7 @@ import os
 import urllib.parse
 from pathlib import Path
 from routes.health import router as health_router
+from services.rag_service import process_chat
 # pyrefly: ignore [missing-import]
 import feedparser
 from fastapi import FastAPI, HTTPException
@@ -304,18 +305,23 @@ grafo_rag = grafo.compile()
 @app.post("/chat", response_model=ChatResponse, tags=["Chat"])
 def chat(body: ChatRequest):
     """
-    Recebe uma pergunta, usa LangGraph para buscar contexto
-    com verificação condicional e retorna a resposta.
+    Recebe uma pergunta e encaminha para o serviço RAG.
     """
     if not GROQ_API_KEY:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY nao configurada.")
-    if not DATABASE_URL:
-        raise HTTPException(status_code=500, detail="Banco nao configurado. Defina DB_HOST e DB_PASSWORD no .env.")
+        raise HTTPException(
+            status_code=500,
+            detail="GROQ_API_KEY nao configurada."
+        )
 
-    # Invoca o grafo
-    resultado = grafo_rag.invoke({"pergunta": body.question, "top_k": 5})
-    
-    docs = resultado.get("documentos_recuperados", [])
-    sources = list({doc.metadata.get("source", "") for doc in docs if doc.metadata.get("source")})
-    
-    return ChatResponse(answer=resultado["resposta"], sources=sources)
+    if not DATABASE_URL:
+        raise HTTPException(
+            status_code=500,
+            detail="Banco nao configurado. Defina DB_HOST e DB_PASSWORD no .env."
+        )
+
+    result = process_chat(
+        question=body.question,
+        rag_runner=grafo_rag.invoke,
+    )
+
+    return ChatResponse(**result)
