@@ -1,8 +1,10 @@
 import os
+import logging
 import urllib.parse
 from pathlib import Path
 # pyrefly: ignore [missing-import]
 import feedparser
+import psycopg
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -49,6 +51,9 @@ def _load_dotenv_safe():
 
 
 _load_dotenv_safe()
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # App Setup
@@ -161,10 +166,42 @@ class ChatResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _fetch_and_chunk_rss(urls: List[str]):
-    """Busca artigos dos feeds RSS e retorna (chunks, metadatas)."""
+def _get_existing_sources() -> set:
+    """
+    Consulta o banco para retornar os links de artigos já ingeridos.
+    Isso evita re-inserir notícias duplicadas no PGVector.
+    """
+    if not DATABASE_URL:
+        return set()
+
+    # psycopg3 direto usa 'postgresql://' em vez de 'postgresql+psycopg://'
+    conn_str = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
+    try:
+        with psycopg.connect(conn_str) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT DISTINCT cmetadata->>'source'
+                    FROM langchain_pg_embedding e
+                    JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+                    WHERE c.name = %s AND cmetadata->>'source' IS NOT NULL
+                """, (COLLECTION_NAME,))
+                return {row[0] for row in cur.fetchall()}
+    except Exception as exc:
+        logger.warning("Não foi possível consultar fontes existentes: %s", exc)
+        return set()
+
+
+def _fetch_and_chunk_rss(urls: List[str], existing_sources: set | None = None):
+    """
+    Busca artigos dos feeds RSS e retorna (chunks, metadatas).
+    Artigos cujo link já está em existing_sources são ignorados.
+    """
+    if existing_sources is None:
+        existing_sources = set()
+
     all_docs: List[str] = []
     metadata_list: List[dict] = []
+    skipped = 0
 
     for url in urls:
         feed = feedparser.parse(url)
@@ -177,12 +214,20 @@ def _fetch_and_chunk_rss(urls: List[str]):
             link = entry.get("link", url)
             published = entry.get("published", "")
 
+            # Deduplicação: pula artigos já ingeridos
+            if link in existing_sources:
+                skipped += 1
+                continue
+
             content = f"Título: {title}\n\nResumo: {summary}"
             if content.strip():
                 all_docs.append(content)
                 metadata_list.append(
                     {"source": link, "title": title, "published": published}
                 )
+
+    if skipped:
+        logger.info("Deduplicação: %d artigos já existentes foram ignorados.", skipped)
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     chunks: List[str] = []
@@ -193,7 +238,7 @@ def _fetch_and_chunk_rss(urls: List[str]):
         chunks.extend(parts)
         chunk_metadata.extend([meta] * len(parts))
 
-    return chunks, chunk_metadata, len(all_docs)
+    return chunks, chunk_metadata, len(all_docs), skipped
 
 
 # ---------------------------------------------------------------------------
@@ -211,13 +256,28 @@ def ingest():
     """
     Busca os feeds RSS da BBC (fixos no backend), faz chunking
     e persiste os vetores no PGVector.
+    Artigos já ingeridos são ignorados automaticamente (deduplicação).
     """
     if not DATABASE_URL:
         raise HTTPException(status_code=500, detail="DATABASE_URL não configurada.")
 
-    chunks, chunk_metadata, total_articles = _fetch_and_chunk_rss(BBC_RSS_URLS)
+    # Busca links já existentes para evitar duplicatas
+    existing = _get_existing_sources()
+    logger.info("Fontes já existentes no banco: %d", len(existing))
+
+    chunks, chunk_metadata, total_articles, skipped = _fetch_and_chunk_rss(
+        BBC_RSS_URLS, existing_sources=existing
+    )
 
     if not chunks:
+        if skipped > 0:
+            return {
+                "message": "Todas as notícias já estão atualizadas no banco.",
+                "feeds_processados": len(BBC_RSS_URLS),
+                "articles_processed": 0,
+                "chunks_stored": 0,
+                "skipped": skipped,
+            }
         raise HTTPException(
             status_code=422,
             detail="Nenhum conteúdo válido encontrado nos feeds da BBC.",
@@ -231,6 +291,7 @@ def ingest():
         "feeds_processados": len(BBC_RSS_URLS),
         "articles_processed": total_articles,
         "chunks_stored": len(chunks),
+        "skipped": skipped,
     }
 
 
@@ -281,7 +342,7 @@ def no_gerar_resposta(estado: EstadoRAG):
     )
     llm = ChatGroq(
         groq_api_key=GROQ_API_KEY,
-        model_name="openai/gpt-oss-20b", 
+        model_name="qwen/qwen3.8-27b",
         temperature=0.3,
     )
     chain = prompt | llm | StrOutputParser()

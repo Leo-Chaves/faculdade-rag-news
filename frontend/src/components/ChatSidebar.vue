@@ -108,7 +108,13 @@ async function handleIngest() {
   try {
     const { data } = await axios.post("/ingest");
     ingestSuccess.value = true;
-    ingestMessage.value = `✅ ${data.chunks_stored} chunks de ${data.articles_processed} artigos salvos!`;
+    if (data.chunks_stored === 0 && data.skipped > 0) {
+      ingestMessage.value = `✅ Notícias já atualizadas! (${data.skipped} artigos já existiam)`;
+    } else if (data.skipped > 0) {
+      ingestMessage.value = `✅ ${data.chunks_stored} chunks de ${data.articles_processed} novos artigos salvos! (${data.skipped} já existiam)`;
+    } else {
+      ingestMessage.value = `✅ ${data.chunks_stored} chunks de ${data.articles_processed} artigos salvos!`;
+    }
   } catch (err) {
     ingestSuccess.value = false;
     ingestMessage.value =
