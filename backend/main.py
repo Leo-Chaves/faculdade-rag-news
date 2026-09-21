@@ -5,8 +5,8 @@ from pathlib import Path
 import feedparser
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from typing import List, TypedDict, Literal
+from schemas.chat import ChatRequest, ChatResponse
 # pyrefly: ignore [missing-import]
 from langgraph.graph import StateGraph, START, END
 from dotenv import load_dotenv
@@ -141,21 +141,6 @@ def get_vector_store() -> PGVectorStore:
         )
     return _vector_store
 
-
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
-
-
-class ChatRequest(BaseModel):
-    question: str
-
-
-class ChatResponse(BaseModel):
-    answer: str
-    sources: List[str] = []
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -202,8 +187,13 @@ def _fetch_and_chunk_rss(urls: List[str]):
 
 
 @app.get("/", tags=["Health"])
-def health_check():
+def root():
     return {"status": "ok", "message": "RAG News API is running"}
+
+
+@app.get("/health", tags=["Health"])
+def health_check():
+    return {"status": "ok"}
 
 
 @app.post("/ingest", tags=["Ingestion"])
