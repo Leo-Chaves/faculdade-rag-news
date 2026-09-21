@@ -1,4 +1,5 @@
 import os
+import gc
 import logging
 import urllib.parse
 from pathlib import Path
@@ -59,6 +60,17 @@ logger = logging.getLogger(__name__)
 # App Setup
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Reduz uso de memória do PyTorch (essencial pro Render free 512MB)
+# ---------------------------------------------------------------------------
+try:
+    import torch
+    torch.set_num_threads(1)
+    torch.set_num_interop_threads(1)
+    logger.info("PyTorch configurado com 1 thread para economia de RAM.")
+except Exception:
+    pass
+
 app = FastAPI(
     title="RAG News API",
     description="API de RAG para notícias usando Groq + PGVector",
@@ -86,7 +98,7 @@ BBC_RSS_URLS: List[str] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Shared resources (lazy-initialized)
+# Shared resources
 # ---------------------------------------------------------------------------
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
@@ -131,7 +143,11 @@ DATABASE_URL = _build_database_url()
 def get_embeddings() -> HuggingFaceEmbeddings:
     global _embeddings
     if _embeddings is None:
+        logger.info("Carregando modelo de embeddings...")
         _embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        # Libera lixo do carregamento do PyTorch
+        gc.collect()
+        logger.info("Modelo de embeddings carregado com sucesso.")
     return _embeddings
 
 
@@ -145,6 +161,28 @@ def get_vector_store() -> PGVectorStore:
             use_jsonb=True,
         )
     return _vector_store
+
+
+# ---------------------------------------------------------------------------
+# Startup: pré-carrega o modelo para evitar OOM durante requests
+# ---------------------------------------------------------------------------
+
+@app.on_event("startup")
+async def startup_preload():
+    """
+    Pré-carrega o modelo de embeddings no startup ao invés de
+    carregar na primeira request. No Render free (512MB), carregar
+    durante uma request pode causar pico de memória + timeout.
+    """
+    logger.info("=== Startup: pré-carregando modelo de embeddings ===")
+    try:
+        get_embeddings()
+        gc.collect()
+        logger.info("=== Startup concluído com sucesso ===")
+    except Exception as exc:
+        logger.error("Falha ao pré-carregar embeddings: %s", exc)
+        # Não levanta exceção — deixa o app iniciar mesmo sem embeddings
+        # para que o health check funcione e o Render não fique em loop
 
 
 # ---------------------------------------------------------------------------
