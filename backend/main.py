@@ -337,13 +337,24 @@ def ingest():
 # Grafo RAG com LangGraph
 # ---------------------------------------------------------------------------
 
-class EstadoRAG(TypedDict):
+class EstadoRAG(TypedDict, total=False):
     pergunta: str
     top_k: int
     documentos_recuperados: list
     score_maximo: float
     contexto: str
     resposta: str
+    verificacao: dict
+    prompt_mode: str
+
+# ---------------------------------------------------------------------------
+# Configuração de Engenharia de Prompt
+# ---------------------------------------------------------------------------
+
+PROMPT_MODE = os.getenv("PROMPT_MODE", "zero-shot").lower()
+
+if PROMPT_MODE not in {"zero-shot", "few-shot"}:
+    PROMPT_MODE = "zero-shot"
 
 def no_recuperar(estado: EstadoRAG):
     vs = get_vector_store()
