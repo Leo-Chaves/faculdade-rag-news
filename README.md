@@ -2,7 +2,7 @@
 
 🔗 **Acesse o projeto online:** [https://ragnewsbbc.netlify.app/](https://ragnewsbbc.netlify.app/)
 
-Projeto de faculdade: sistema de **Retrieval-Augmented Generation (RAG)** para responder perguntas sobre notícias atuais, usando **LangChain**, **Groq** e **PGVector (Supabase)**.
+Projeto de faculdade: sistema de **Retrieval-Augmented Generation (RAG)** para responder perguntas sobre notícias atuais, usando **LangChain**, **LangGraph**, **OpenRouter** e **PGVector (Supabase)**.
 
 ---
 
@@ -10,7 +10,7 @@ Projeto de faculdade: sistema de **Retrieval-Augmented Generation (RAG)** para r
 
 ```
 faculdade-rag-news/
-├── backend/          # FastAPI + LangChain + Groq
+├── backend/          # FastAPI + LangChain + LangGraph + OpenRouter
 │   ├── main.py
 │   ├── requirements.txt
 │   ├── Dockerfile
@@ -33,14 +33,14 @@ faculdade-rag-news/
 
 ### 1. Pré-requisitos
 - Python 3.11+
-- Conta no [Groq](https://console.groq.com) (chave grátis)
+- Chave de API no [OpenRouter](https://openrouter.ai/keys)
 - Projeto no [Supabase](https://supabase.com) com extensão **pgvector** habilitada
 
 ### 2. Configurar variáveis de ambiente
 ```bash
 cd backend
 cp .env.example .env
-# Edite o .env com suas chaves
+# Edite o .env com sua OPENROUTER_API_KEY e credenciais do Supabase
 ```
 
 ### 3. Instalar dependências e rodar
@@ -55,28 +55,12 @@ uvicorn main:app --reload --port 8000
 
 ### Rotas da API
 
-| Método | Rota      | Descrição                                       |
-|--------|-----------|-------------------------------------------------|
-| GET    | `/`       | Health check                                    |
-| POST   | `/ingest` | Recebe URLs RSS e salva chunks no PGVector      |
-| POST   | `/chat`   | Recebe pergunta e retorna resposta via Groq RAG |
-
-#### Exemplo — `/ingest`
-```json
-POST /ingest
-{
-  "urls": [
-    "https://feeds.bbci.co.uk/portuguese/rss.xml",
-    "https://g1.globo.com/dynamo/tecnologia/rss2.xml"
-  ]
-}
-```
-
-#### Exemplo — `/chat`
-```json
-POST /chat
-{ "question": "aconteceu algo no brasil?" }
-```
+| Método | Rota      | Descrição                                                                         |
+|--------|-----------|-----------------------------------------------------------------------------------|
+| GET    | `/`       | Health check e modelos ativos                                                     |
+| POST   | `/ingest` | Busca notícias da BBC, gera embeddings e salva no PGVector                       |
+| POST   | `/chat`   | Recebe pergunta e gera resposta via LangGraph + OpenRouter                        |
+| POST   | `/reset`  | Reseta tabelas do PGVector no Supabase (usar se trocar o modelo de embeddings)   |
 
 ---
 
@@ -99,23 +83,22 @@ npm run dev
 ### Backend
 1. Crie um **Web Service** apontando para `/backend`
 2. Runtime: **Docker**
-3. Adicione as variáveis de ambiente (`GROQ_API_KEY`, `DATABASE_URL`)
+3. Adicione as variáveis de ambiente (`OPENROUTER_API_KEY`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_NAME`)
 
 ### Frontend
 1. Crie um **Static Site** apontando para `/frontend`
 2. Build command: `npm run build`
 3. Publish directory: `dist`
-4. Defina a variável `VITE_API_URL` se necessário
 
 ---
 
 ## 🛠️ Stack
 
-| Camada     | Tecnologia                          |
-|------------|-------------------------------------|
-| LLM        | Groq — `llama3-8b-8192`             |
-| Embeddings | HuggingFace `all-MiniLM-L6-v2`      |
-| Vector DB  | PGVector via Supabase               |
-| Orquestração | LangChain (RetrievalQA)           |
-| API        | FastAPI + Uvicorn                   |
-| Frontend   | Vue 3 · Tailwind CSS · Vite         |
+| Camada       | Tecnologia                                                   |
+|--------------|--------------------------------------------------------------|
+| LLM          | OpenRouter (`nvidia/nemotron-3.5-super-vl:free`)             |
+| Embeddings   | OpenRouter (`nvidia/llama-nemotron-embed-vl-1b-v2:free`)     |
+| Vector DB    | PGVector via Supabase                                        |
+| Orquestração | LangChain + LangGraph                                        |
+| API          | FastAPI + Uvicorn                                            |
+| Frontend     | Vue 3 · Tailwind CSS · Vite                                  |

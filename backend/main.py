@@ -1,27 +1,25 @@
 import os
-import gc
 import logging
 import urllib.parse
 from pathlib import Path
+from typing import List, TypedDict, Literal
+
 # pyrefly: ignore [missing-import]
 import feedparser
 import psycopg
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, TypedDict, Literal
-# pyrefly: ignore [missing-import]
-from langgraph.graph import StateGraph, START, END
 from dotenv import load_dotenv
 
 # pyrefly: ignore [missing-import]
+from langgraph.graph import StateGraph, START, END
+# pyrefly: ignore [missing-import]
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 # pyrefly: ignore [missing-import]
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 # pyrefly: ignore [missing-import]
 from langchain_postgres import PGVector as PGVectorStore
-# pyrefly: ignore [missing-import]
-from langchain_groq import ChatGroq
 # pyrefly: ignore [missing-import]
 from langchain_core.prompts import ChatPromptTemplate
 # pyrefly: ignore [missing-import]
@@ -60,21 +58,10 @@ logger = logging.getLogger(__name__)
 # App Setup
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Reduz uso de memória do PyTorch (essencial pro Render free 512MB)
-# ---------------------------------------------------------------------------
-try:
-    import torch
-    torch.set_num_threads(1)
-    torch.set_num_interop_threads(1)
-    logger.info("PyTorch configurado com 1 thread para economia de RAM.")
-except Exception:
-    pass
-
 app = FastAPI(
     title="RAG News API",
-    description="API de RAG para notícias usando Groq + PGVector",
-    version="1.0.0",
+    description="API de RAG para notícias usando OpenRouter (LLM + Embeddings) e PGVector",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -98,13 +85,23 @@ BBC_RSS_URLS: List[str] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Shared resources
+# Configurações do OpenRouter e Banco
 # ---------------------------------------------------------------------------
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free")
+OPENROUTER_EMBEDDING_MODEL = os.getenv("OPENROUTER_EMBEDDING_MODEL", "nvidia/llama-nemotron-embed-vl-1b-v2:free")
 COLLECTION_NAME = "rag_news"
 
-_embeddings: HuggingFaceEmbeddings | None = None
+FALLBACK_FREE_MODELS: List[str] = [
+    "nvidia/nemotron-3.5-super-vl:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "openrouter/free",
+]
+
+_embeddings: OpenAIEmbeddings | None = None
 _vector_store: PGVectorStore | None = None
 
 
@@ -113,13 +110,6 @@ def _build_database_url() -> str:
     Constrói a DATABASE_URL a partir de variáveis individuais.
     Isso garante que a senha seja URL-encoded corretamente,
     evitando UnicodeDecodeError com caracteres especiais (ã, @, #, etc.).
-
-    Variáveis esperadas no .env:
-        DB_USER     - usuário do banco (ex: postgres)
-        DB_PASSWORD - senha (pode ter qualquer caractere)
-        DB_HOST     - host do Supabase (ex: db.xxxx.supabase.co)
-        DB_PORT     - porta (padrão: 5432)
-        DB_NAME     - nome do banco (padrão: postgres)
     """
     user = os.getenv("DB_USER", "postgres")
     password = os.getenv("DB_PASSWORD", "")
@@ -130,24 +120,28 @@ def _build_database_url() -> str:
     if not host or not password:
         return ""
 
-    # urllib.parse.quote garante encoding seguro de qualquer caractere
     encoded_password = urllib.parse.quote(password, safe="")
-    # Usa psycopg3 (driver moderno) — sem o bug de encoding do psycopg2
-    # sslmode=require obrigatorio no Supabase
     return f"postgresql+psycopg://{user}:{encoded_password}@{host}:{port}/{name}?sslmode=require"
 
 
 DATABASE_URL = _build_database_url()
 
 
-def get_embeddings() -> HuggingFaceEmbeddings:
+def get_embeddings() -> OpenAIEmbeddings:
     global _embeddings
     if _embeddings is None:
-        logger.info("Carregando modelo de embeddings...")
-        _embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        # Libera lixo do carregamento do PyTorch
-        gc.collect()
-        logger.info("Modelo de embeddings carregado com sucesso.")
+        if not OPENROUTER_API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="OPENROUTER_API_KEY não configurada no .env. Obtenha sua chave em https://openrouter.ai/keys",
+            )
+        logger.info("Inicializando embeddings via OpenRouter (%s)...", OPENROUTER_EMBEDDING_MODEL)
+        _embeddings = OpenAIEmbeddings(
+            model=OPENROUTER_EMBEDDING_MODEL,
+            api_key=OPENROUTER_API_KEY,
+            base_url="https://openrouter.ai/api/v1",
+            check_embedding_ctx_length=False,
+        )
     return _embeddings
 
 
@@ -163,32 +157,18 @@ def get_vector_store() -> PGVectorStore:
     return _vector_store
 
 
-# ---------------------------------------------------------------------------
-# Startup: pré-carrega o modelo para evitar OOM durante requests
-# ---------------------------------------------------------------------------
-
 @app.on_event("startup")
-async def startup_preload():
-    """
-    Pré-carrega o modelo de embeddings no startup ao invés de
-    carregar na primeira request. No Render free (512MB), carregar
-    durante uma request pode causar pico de memória + timeout.
-    """
-    logger.info("=== Startup: pré-carregando modelo de embeddings ===")
-    try:
-        get_embeddings()
-        gc.collect()
-        logger.info("=== Startup concluído com sucesso ===")
-    except Exception as exc:
-        logger.error("Falha ao pré-carregar embeddings: %s", exc)
-        # Não levanta exceção — deixa o app iniciar mesmo sem embeddings
-        # para que o health check funcione e o Render não fique em loop
+async def startup_check():
+    logger.info("=== RAG News API iniciando ===")
+    logger.info("Chat Model: %s", OPENROUTER_MODEL)
+    logger.info("Embedding Model: %s", OPENROUTER_EMBEDDING_MODEL)
+    if not OPENROUTER_API_KEY:
+        logger.warning("ATENÇÃO: OPENROUTER_API_KEY não foi informada no .env!")
 
 
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
-
 
 class ChatRequest(BaseModel):
     question: str
@@ -203,7 +183,6 @@ class ChatResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _get_existing_sources() -> set:
     """
     Consulta o banco para retornar os links de artigos já ingeridos.
@@ -212,7 +191,6 @@ def _get_existing_sources() -> set:
     if not DATABASE_URL:
         return set()
 
-    # psycopg3 direto usa 'postgresql://' em vez de 'postgresql+psycopg://'
     conn_str = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
     try:
         with psycopg.connect(conn_str) as conn:
@@ -225,7 +203,7 @@ def _get_existing_sources() -> set:
                 """, (COLLECTION_NAME,))
                 return {row[0] for row in cur.fetchall()}
     except Exception as exc:
-        logger.warning("Não foi possível consultar fontes existentes: %s", exc)
+        logger.warning("Não foi possível consultar fontes existentes (tabela pode ainda não existir): %s", exc)
         return set()
 
 
@@ -283,19 +261,58 @@ def _fetch_and_chunk_rss(urls: List[str], existing_sources: set | None = None):
 # Routes
 # ---------------------------------------------------------------------------
 
-
 @app.get("/", tags=["Health"])
 def health_check():
-    return {"status": "ok", "message": "RAG News API is running"}
+    return {
+        "status": "ok",
+        "message": "RAG News API is running with OpenRouter",
+        "chat_model": OPENROUTER_MODEL,
+        "embedding_model": OPENROUTER_EMBEDDING_MODEL,
+    }
+
+
+@app.post("/reset", tags=["Admin"])
+def reset_database():
+    """
+    Remove as tabelas do PGVector no Supabase para permitir recriar com a nova dimensão
+    dos embeddings (essencial ao trocar de modelo, ex: de 384 para 1536 dimensões).
+    """
+    if not DATABASE_URL:
+        raise HTTPException(status_code=500, detail="DATABASE_URL não configurada.")
+
+    conn_str = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
+    try:
+        with psycopg.connect(conn_str) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DROP TABLE IF EXISTS langchain_pg_embedding CASCADE;")
+                cur.execute("DROP TABLE IF EXISTS langchain_pg_collection CASCADE;")
+                conn.commit()
+
+        global _vector_store, _embeddings
+        _vector_store = None
+        _embeddings = None
+
+        logger.info("Tabelas de embeddings resetadas com sucesso.")
+        return {
+            "message": "Tabelas de embeddings resetadas com sucesso no Supabase. Execute /ingest para re-indexar as notícias com o novo modelo."
+        }
+    except Exception as exc:
+        logger.error("Erro ao resetar tabelas: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Erro ao resetar banco: {exc}")
 
 
 @app.post("/ingest", tags=["Ingestion"])
 def ingest():
     """
     Busca os feeds RSS da BBC (fixos no backend), faz chunking
-    e persiste os vetores no PGVector.
+    e persiste os vetores no PGVector via OpenRouter Embeddings.
     Artigos já ingeridos são ignorados automaticamente (deduplicação).
     """
+    if not OPENROUTER_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="OPENROUTER_API_KEY não configurada no .env. Obtenha sua chave em https://openrouter.ai/keys",
+        )
     if not DATABASE_URL:
         raise HTTPException(status_code=500, detail="DATABASE_URL não configurada.")
 
@@ -321,8 +338,15 @@ def ingest():
             detail="Nenhum conteúdo válido encontrado nos feeds da BBC.",
         )
 
-    vs = get_vector_store()
-    vs.add_texts(texts=chunks, metadatas=chunk_metadata)
+    try:
+        vs = get_vector_store()
+        vs.add_texts(texts=chunks, metadatas=chunk_metadata)
+    except Exception as exc:
+        logger.error("Erro durante add_texts no PGVector: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao salvar vetores no PGVector. Se você mudou de modelo de embedding recentemente, faça uma chamada POST para /reset antes de reingerir: {exc}",
+        )
 
     return {
         "message": "Ingestão dos feeds da BBC concluída com sucesso.",
@@ -345,18 +369,20 @@ class EstadoRAG(TypedDict):
     contexto: str
     resposta: str
 
+
 def no_recuperar(estado: EstadoRAG):
     vs = get_vector_store()
     docs_scores = vs.similarity_search_with_relevance_scores(estado["pergunta"], k=estado["top_k"])
-    
+
     if docs_scores:
         score_max = max(score for doc, score in docs_scores)
         docs = [doc for doc, score in docs_scores]
     else:
         score_max = 0.0
         docs = []
-        
+
     return {"documentos_recuperados": docs, "score_maximo": score_max}
+
 
 def no_montar_contexto(estado: EstadoRAG):
     docs = estado["documentos_recuperados"]
@@ -366,6 +392,7 @@ def no_montar_contexto(estado: EstadoRAG):
         partes.append(f"[{titulo}]\n{doc.page_content}")
     contexto = "\n\n".join(partes)
     return {"contexto": contexto}
+
 
 def no_gerar_resposta(estado: EstadoRAG):
     prompt = ChatPromptTemplate.from_template(
@@ -378,24 +405,45 @@ def no_gerar_resposta(estado: EstadoRAG):
         "3. Responda em Português do Brasil (PT-BR). Se a notícia for sobre um assunto leve e descontraído (ex: curiosidades, entretenimento), sinta-se à vontade para fazer uma piada rápida e inteligente no final da resposta. Se for um assunto sério (tragédias, política pesada), mantenha a postura profissional e neutra.\n\n"
         "Contexto:\n{contexto}\n\nPergunta: {pergunta}\n\nResposta:"
     )
-    llm = ChatGroq(
-        groq_api_key=GROQ_API_KEY,
-        model_name="qwen/qwen3.8-27b",
-        temperature=0.3,
-    )
-    chain = prompt | llm | StrOutputParser()
-    resposta = chain.invoke({"contexto": estado["contexto"], "pergunta": estado["pergunta"]})
-    return {"resposta": resposta}
+
+    modelos_candidatos = list(dict.fromkeys([OPENROUTER_MODEL] + FALLBACK_FREE_MODELS))
+    ultimo_erro = None
+
+    for modelo in modelos_candidatos:
+        try:
+            llm = ChatOpenAI(
+                model=modelo,
+                api_key=OPENROUTER_API_KEY,
+                base_url="https://openrouter.ai/api/v1",
+                temperature=0.3,
+                default_headers={
+                    "HTTP-Referer": "http://localhost:8000",
+                    "X-Title": "RAG News Faculdade",
+                },
+            )
+            chain = prompt | llm | StrOutputParser()
+            resposta = chain.invoke({"contexto": estado["contexto"], "pergunta": estado["pergunta"]})
+            if modelo != OPENROUTER_MODEL:
+                logger.info("Resposta gerada usando modelo fallback gratuito: %s", modelo)
+            return {"resposta": resposta}
+        except Exception as exc:
+            logger.warning("Modelo '%s' indisponível (%s). Tentando próximo fallback...", modelo, exc)
+            ultimo_erro = exc
+
+    raise ultimo_erro
+
 
 def no_sem_evidencia(estado: EstadoRAG):
     return {"resposta": "Não encontrei essa informação nas notícias de hoje.", "documentos_recuperados": []}
 
+
 def decidir_evidencia(estado: EstadoRAG) -> Literal["com_evidencia", "sem_evidencia"]:
-    # Threshold calibrado (0.05): Mantém a lógica condicional do LangGraph funcionando 
-    # (barra absurdos/ruídos com score muito baixo), mas permite que buscas cross-lingual (PT->EN) passem.
-    if estado.get("score_maximo", -1.0) >= 0.05:
+    # Com modelos modernos de embedding, buscas cross-lingual (PT -> EN) têm scores consistentes.
+    # O threshold de 0.10 barra ruídos mantendo perguntas relevantes.
+    if estado.get("score_maximo", -1.0) >= 0.10:
         return "com_evidencia"
     return "sem_evidencia"
+
 
 grafo = StateGraph(EstadoRAG)
 grafo.add_node("recuperar", no_recuperar)
@@ -418,21 +466,28 @@ grafo.add_edge("sem_evidencia", END)
 
 grafo_rag = grafo.compile()
 
+
 @app.post("/chat", response_model=ChatResponse, tags=["Chat"])
 def chat(body: ChatRequest):
     """
     Recebe uma pergunta, usa LangGraph para buscar contexto
-    com verificação condicional e retorna a resposta.
+    com verificação condicional e retorna a resposta via OpenRouter.
     """
-    if not GROQ_API_KEY:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY nao configurada.")
+    if not OPENROUTER_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="OPENROUTER_API_KEY não configurada no .env. Obtenha sua chave em https://openrouter.ai/keys",
+        )
     if not DATABASE_URL:
-        raise HTTPException(status_code=500, detail="Banco nao configurado. Defina DB_HOST e DB_PASSWORD no .env.")
+        raise HTTPException(
+            status_code=500,
+            detail="Banco não configurado. Defina DB_HOST e DB_PASSWORD no .env.",
+        )
 
     # Invoca o grafo
     resultado = grafo_rag.invoke({"pergunta": body.question, "top_k": 5})
-    
+
     docs = resultado.get("documentos_recuperados", [])
     sources = list({doc.metadata.get("source", "") for doc in docs if doc.metadata.get("source")})
-    
+
     return ChatResponse(answer=resultado["resposta"], sources=sources)

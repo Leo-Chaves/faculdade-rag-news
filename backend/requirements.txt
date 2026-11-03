@@ -1,30 +1,26 @@
 # Web Framework
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
 
 # Environment
-python-dotenv==1.0.1
+python-dotenv>=1.0.1
 
-# LangChain ecosystem (versoes atualizadas e compativeis)
+# LangChain ecosystem
 langchain
 langchain-core
 langchain-community
 langchain-text-splitters
-langchain-groq
-langchain-huggingface
+langchain-openai
 langgraph
 langgraph-checkpoint
 
 # Vector Store - psycopg3 (moderno, sem bug de encoding)
-langchain-postgres==0.0.18
-psycopg[binary]==3.3.6
-pgvector==0.3.2
-
-# Embeddings (HuggingFace)
-sentence-transformers==3.0.1
+langchain-postgres>=0.0.18
+psycopg[binary]>=3.2.0
+pgvector>=0.3.2
 
 # RSS Feed Parser
-feedparser==6.0.11
+feedparser>=6.0.11
 
 # Pydantic (FastAPI dependency)
-pydantic==2.7.4
+pydantic>=2.8.0
