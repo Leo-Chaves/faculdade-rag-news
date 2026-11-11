@@ -31,7 +31,7 @@
 
       <!-- Sources -->
       <div v-if="links.length" class="sources">
-        <span class="sources-label">Matérias da BBC</span>
+        <span class="sources-label">Fontes consultadas</span>
         <a
           v-for="article in links"
           :key="article.url"
@@ -40,7 +40,7 @@
           rel="noopener noreferrer"
           class="source-link"
         >
-          {{ article.title }} ↗
+          {{ article.publisher ? article.publisher + ' · ' : '' }}{{ article.title }} ↗
         </a>
       </div>
     </div>

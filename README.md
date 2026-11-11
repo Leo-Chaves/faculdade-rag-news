@@ -2,7 +2,7 @@
 
 🔗 **Acesse o projeto online:** [https://ragnewsbbc.netlify.app/](https://ragnewsbbc.netlify.app/)
 
-Projeto universitário com login por e-mail, manchetes da BBC e chat em português. Em **Manchetes**, use **Ler na BBC** para abrir a matéria original ou **Perguntar ao chat** para conversar usando o título e o resumo daquele item do RSS. O chat geral consulta o índice no pgvector.
+Projeto universitário com login por e-mail e chat em português. Na coluna lateral, escolha uma fonte e marque seus temas para priorizar as manchetes. **Salvar preferências** vincula as escolhas à sua conta. Selecione uma manchete para conversar usando o título e o resumo do RSS ou abra o link da fonte original. O chat geral consulta o índice no pgvector.
 
 ---
 
@@ -24,8 +24,7 @@ faculdade-rag-news/
     │   ├── style.css
     │   └── components/
     │       ├── AuthForm.vue
-    │       ├── ChatMessage.vue
-    │       └── NewsCard.vue
+    │       └── ChatMessage.vue
     ├── index.html
     └── vite.config.js
 ```
@@ -65,12 +64,12 @@ uvicorn main:app --reload --port 8000
 |--------|-----------|-----------------------------------------------------------------------------------|
 | GET    | `/`       | Health check e modelos ativos                                                     |
 | GET    | `/auth/config` | URL e chave pública para iniciar o Supabase Auth |
-| GET    | `/news` | Manchetes da BBC por data de publicação, com cache de cinco minutos |
-| POST   | `/ingest` | Atualiza o índice do pgvector com os feeds da BBC |
+| GET    | `/news` | Manchetes da BBC News e da Agência Brasil por data de publicação, com cache de cinco minutos |
+| POST   | `/ingest` | Atualiza o índice do pgvector com os feeds de notícias |
 | POST   | `/chat` | Recebe `question` e, opcionalmente, `article_url`. Retorna resposta e matérias consultadas |
 | POST   | `/reset` | Recria o índice na próxima ingestão. A chamada exige o cabeçalho `X-Admin-Key` correspondente a `RAG_ADMIN_KEY` |
 
-As rotas `/news`, `/ingest` e `/chat` exigem `Authorization: Bearer <access_token>` do Supabase Auth. Para popular o índice, entre no site e use **Chat → Atualizar índice de busca**.
+As rotas `/news`, `/ingest` e `/chat` exigem `Authorization: Bearer <access_token>` do Supabase Auth. Para popular o índice, entre no site e use **Atualizar índice de busca** abaixo da caixa de mensagem.
 
 ---
 

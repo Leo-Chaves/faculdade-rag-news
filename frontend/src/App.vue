@@ -4,7 +4,6 @@ import { createClient } from '@supabase/supabase-js'
 import axios from 'axios'
 import AuthForm from './components/AuthForm.vue'
 import ChatMessage from './components/ChatMessage.vue'
-import NewsCard from './components/NewsCard.vue'
 
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '', timeout: 15000 })
 const client = shallowRef(null)
@@ -14,16 +13,28 @@ const authError = ref('')
 let authSubscription
 let accountRequests = new AbortController()
 
-const view = ref('news')
 const news = ref([])
-const category = ref('')
-const pageSize = ref(7)
+const sidebarOpen = ref(false)
+const pageSize = ref(5)
 const newsLoading = ref(false)
 const newsError = ref('')
-const categories = computed(() => [...new Set(news.value.map((article) => article.category))])
-const filteredNews = computed(() =>
-  category.value ? news.value.filter((article) => article.category === category.value) : news.value,
-)
+const publishers = ['BBC News', 'Agência Brasil']
+const categories = ['Mundo', 'Economia', 'Tecnologia', 'Ciência e ambiente', 'Política',
+  'Saúde', 'Educação', 'Esportes', 'Cultura', 'Justiça', 'Direitos humanos', 'Geral']
+const preferredTopics = ref([])
+const source = ref('')
+const savingPreferences = ref(false)
+const preferenceStatus = ref('')
+const preferenceError = ref(false)
+const filteredNews = computed(() => {
+  const available = news.value.filter((article) => !source.value || source.value === article.publisher)
+  const preferred = []
+  const other = []
+  for (const article of available) {
+    (preferredTopics.value.includes(article.category) ? preferred : other).push(article)
+  }
+  return [...preferred, ...other]
+})
 const visibleNews = computed(() => filteredNews.value.slice(0, pageSize.value))
 
 const messages = ref([])
@@ -90,17 +101,50 @@ watch(() => session.value?.user.id, (userId) => {
   accountRequests.abort()
   accountRequests = new AbortController()
   news.value = []
-  category.value = ''
-  pageSize.value = 7
+  sidebarOpen.value = false
+  pageSize.value = 5
   newsError.value = ''
   newsLoading.value = false
   syncing.value = false
   syncStatus.value = ''
   chatLoading.value = false
   resetChat()
-  view.value = 'news'
+  savingPreferences.value = false
+  preferenceStatus.value = ''
   if (userId) loadNews()
 })
+
+watch([() => session.value?.user.id, () => session.value?.user.user_metadata?.news_preferences], ([, preferences]) => {
+  preferredTopics.value = categories.filter((topic) =>
+    Array.isArray(preferences?.topics) && preferences.topics.includes(topic))
+  source.value = publishers.includes(preferences?.source) ? preferences.source : ''
+}, { immediate: true })
+
+watch([source, preferredTopics], () => {
+  pageSize.value = 5
+  preferenceStatus.value = ''
+})
+
+async function savePreferences() {
+  savingPreferences.value = true
+  preferenceStatus.value = ''
+  preferenceError.value = false
+  const signal = accountRequests.signal
+  try {
+    const { error } = await client.value.auth.updateUser({
+      data: { news_preferences: { topics: preferredTopics.value, source: source.value } },
+    })
+    if (error) throw error
+    if (!signal.aborted) preferenceStatus.value = 'Preferências salvas.'
+  } catch {
+    if (!signal.aborted) {
+      preferenceError.value = true
+      preferenceStatus.value = 'Não foi possível salvar. Tente novamente.'
+    }
+  } finally {
+    if (!signal.aborted) savingPreferences.value = false
+  }
+}
 
 async function signOut() {
   authError.value = ''
@@ -116,7 +160,6 @@ async function loadNews() {
     const articles = await request({ url: '/news' })
     if (signal.aborted) return
     news.value = articles
-    if (!categories.value.includes(category.value)) category.value = ''
   } catch (error) {
     if (!signal.aborted) newsError.value = detail(error, 'Não foi possível carregar as manchetes.')
   } finally {
@@ -124,16 +167,11 @@ async function loadNews() {
   }
 }
 
-function filterNews(topic) {
-  category.value = topic
-  pageSize.value = 7
-}
-
 async function openArticle(article) {
   if (chatLoading.value) return
-  if (selectedArticle.value?.url !== article.url) resetChat()
   selectedArticle.value = article
-  view.value = 'chat'
+  sidebarOpen.value = false
+  chatError.value = ''
   await nextTick()
   input.value?.focus()
 }
@@ -156,6 +194,7 @@ async function sendQuestion(text) {
 
   const signal = accountRequests.signal
   const article = selectedArticle.value
+  const history = messages.value.slice(-6).map(({ role, content }) => ({ role, content: content.slice(0, 2000) }))
   chatLoading.value = true
   chatError.value = ''
   question.value = ''
@@ -170,7 +209,7 @@ async function sendQuestion(text) {
       url: '/chat',
       method: 'POST',
       timeout: 120000,
-      data: { question: trimmed, article_url: article?.url },
+      data: { question: trimmed, article_url: article?.url, history },
     })
     if (signal.aborted) return
     messages.value = messages.value.map((message) => message.id === id
@@ -234,16 +273,64 @@ function handleEnter(event) {
     </section>
   </main>
 
-  <div v-else class="workspace">
-    <aside class="navigation">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">R</span>
-        <span>RAG News</span>
+  <div v-else class="workspace" @keydown.esc="sidebarOpen = false">
+    <button v-if="sidebarOpen" class="sidebar-scrim" aria-label="Fechar notícias" @click="sidebarOpen = false" />
+    <aside id="news-sidebar" class="navigation" :class="{ 'sidebar-open': sidebarOpen }" aria-label="Painel de notícias">
+      <div class="sidebar-heading">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">R</span>
+          <span>RAG News</span>
+        </div>
+        <button class="text-button mobile-control" @click="sidebarOpen = false">Fechar</button>
       </div>
-      <nav aria-label="Navegação principal">
-        <button :aria-current="view === 'news' ? 'page' : undefined" @click="view = 'news'">Manchetes</button>
-        <button :aria-current="view === 'chat' ? 'page' : undefined" @click="view = 'chat'">Chat</button>
-      </nav>
+
+      <div class="sidebar-scroll">
+        <section class="sidebar-settings" aria-label="Preferências de notícias">
+          <label class="source-label" for="news-source">Fontes das manchetes</label>
+          <select id="news-source" v-model="source" :disabled="savingPreferences">
+            <option value="">Todas as fontes</option>
+            <option v-for="publisher in publishers" :key="publisher">{{ publisher }}</option>
+          </select>
+          <details class="topic-settings">
+            <summary>Meus temas <span v-if="preferredTopics.length">({{ preferredTopics.length }})</span></summary>
+            <fieldset :disabled="savingPreferences" class="topic-options">
+              <legend>Os temas escolhidos aparecem primeiro.</legend>
+              <label v-for="topic in categories" :key="topic">
+                <input v-model="preferredTopics" type="checkbox" :value="topic" /> {{ topic }}
+              </label>
+            </fieldset>
+          </details>
+          <button class="text-button" :disabled="savingPreferences" @click="savePreferences">
+            {{ savingPreferences ? 'Salvando…' : 'Salvar preferências' }}
+          </button>
+          <p v-if="preferenceStatus" :class="{ error: preferenceError }" role="status">{{ preferenceStatus }}</p>
+        </section>
+
+        <section class="headlines" aria-labelledby="headlines-heading">
+          <div class="headlines-heading">
+            <h2 id="headlines-heading">{{ preferredTopics.length ? 'Para você' : 'Principais notícias' }}</h2>
+            <button class="text-button" :disabled="newsLoading" @click="loadNews">Atualizar</button>
+          </div>
+          <p v-if="newsError" class="error" role="alert">{{ newsError }}</p>
+          <p v-else-if="newsLoading && !news.length" class="muted" role="status">Buscando notícias…</p>
+          <p v-else-if="!visibleNews.length" class="muted">Nenhuma manchete disponível para esta fonte.</p>
+          <ul class="headline-list">
+            <li v-for="article in visibleNews" :key="article.url" :class="{ 'headline-active': selectedArticle?.url === article.url }">
+              <button class="headline-title" :disabled="chatLoading" :aria-pressed="selectedArticle?.url === article.url"
+                @click="openArticle(article)">{{ article.title }}</button>
+              <div class="headline-meta">
+                <span>{{ article.category }}</span>
+                <a :href="article.url" target="_blank" rel="noopener noreferrer"
+                  :aria-label="'Ler em ' + article.publisher + ': ' + article.title">{{ article.publisher }} ↗</a>
+              </div>
+            </li>
+          </ul>
+          <button v-if="filteredNews.length > pageSize" class="text-button more-news" @click="pageSize += 5">
+            Mostrar mais notícias
+          </button>
+        </section>
+      </div>
+
       <div class="account">
         <p class="account-email" :title="session.user.email">{{ session.user.email }}</p>
         <div class="account-actions">
@@ -254,76 +341,56 @@ function handleEnter(event) {
       </div>
     </aside>
 
-    <main v-if="view === 'news'" class="main-content">
-      <header class="page-header">
-        <div>
-          <h1>Últimas da BBC</h1>
-          <p class="muted">Escolha uma manchete para ler ou conversar sobre ela.</p>
-        </div>
-        <button class="secondary-button" :disabled="newsLoading" @click="loadNews">
-          {{ newsLoading ? 'Atualizando…' : 'Atualizar manchetes' }}
-        </button>
-      </header>
-      <p v-if="newsError" class="notice error" role="alert">{{ newsError }}</p>
-      <p v-else-if="newsLoading && !news.length" class="notice" role="status">Buscando manchetes da BBC…</p>
-      <p v-else-if="!news.length" class="notice">Nenhuma manchete disponível.</p>
-      <template v-if="news.length">
-        <div class="topic-filters" aria-label="Filtrar manchetes por tema">
-          <button :aria-pressed="!category" @click="filterNews('')">Todas</button>
-          <button v-for="topic in categories" :key="topic" :aria-pressed="category === topic"
-            @click="filterNews(topic)">{{ topic }}</button>
-        </div>
-        <div class="news-grid">
-          <NewsCard v-for="(article, index) in visibleNews" :key="article.url" :article="article"
-            :featured="index === 0" :chat-busy="chatLoading" @ask="openArticle" />
-        </div>
-        <button v-if="filteredNews.length > pageSize" class="secondary-button more-news"
-          @click="pageSize += 6">Mostrar mais notícias</button>
-      </template>
-    </main>
-
-    <main v-else class="main-content chat-page">
-      <header class="page-header">
-        <div>
+    <main class="chat-page">
+      <header class="chat-header">
+        <div class="chat-header-title">
+          <button class="secondary-button mobile-control" aria-controls="news-sidebar" :aria-expanded="sidebarOpen"
+            @click="sidebarOpen = !sidebarOpen">Notícias</button>
           <h1>Chat com notícias</h1>
-          <p class="muted">Faça uma pergunta sobre as matérias da BBC.</p>
         </div>
-        <button class="secondary-button" :disabled="chatLoading" @click="resetChat">Nova conversa</button>
+        <button class="secondary-button" :disabled="chatLoading" @click="resetChat">+ Nova conversa</button>
       </header>
 
-      <div v-if="selectedArticle" class="selected-article">
-        <div>
-          <p class="muted">Matéria em foco</p>
-          <a :href="selectedArticle.url" target="_blank" rel="noopener noreferrer">{{ selectedArticle.title }} ↗</a>
-        </div>
-        <button class="text-button" :disabled="chatLoading" @click="selectedArticle = null">Remover</button>
-      </div>
-      <div v-else class="index-tools">
-        <button class="text-button" :disabled="syncing" @click="syncIndex">
-          {{ syncing ? 'Atualizando índice…' : 'Atualizar índice de busca' }}
-        </button>
-        <span v-if="syncStatus" :class="{ error: syncFailed }" role="status">{{ syncStatus }}</span>
-      </div>
-
-      <section ref="messageList" class="conversation" aria-label="Conversa" role="log">
-        <ChatMessage v-for="message in messages" :key="message.id" :message="message" />
+      <div ref="messageList" class="conversation" aria-label="Conversa" role="log">
         <div v-if="!messages.length" class="chat-empty">
-          <p>{{ selectedArticle ? 'Quer entender melhor esta matéria?' : 'O que você quer descobrir?' }}</p>
+          <span class="brand-mark welcome-mark" aria-hidden="true">R</span>
+          <h2>{{ selectedArticle ? 'Vamos falar sobre esta notícia?' : 'O que está acontecendo?' }}</h2>
+          <p class="muted">{{ selectedArticle ? selectedArticle.title : 'Pergunte sobre o noticiário ou escolha uma manchete na lateral.' }}</p>
           <button v-if="selectedArticle" class="secondary-button" @click="sendQuestion('Resuma esta matéria em português.')">
             Resumir esta matéria
           </button>
-          <button v-else class="secondary-button" @click="view = 'news'">Escolher uma manchete</button>
+          <button v-else class="secondary-button" @click="sendQuestion('Quais são os destaques do noticiário recente?')">
+            Quais são os destaques?
+          </button>
         </div>
-      </section>
+        <div v-else class="conversation-messages">
+          <ChatMessage v-for="message in messages" :key="message.id" :message="message" />
+        </div>
+      </div>
 
-      <p v-if="chatError" class="notice error" role="alert">{{ chatError }}</p>
-      <form class="composer" @submit.prevent="sendQuestion(question)">
-        <textarea ref="input" v-model="question" rows="2" maxlength="2000" aria-label="Sua pergunta"
-          placeholder="Escreva sua pergunta…" @keydown.enter="handleEnter" />
-        <button class="primary-button" :disabled="chatLoading || !question.trim()" type="submit">
-          {{ chatLoading ? 'Enviando…' : 'Enviar' }}
-        </button>
-      </form>
+      <div class="composer-area">
+        <div v-if="selectedArticle" class="selected-article">
+          <div>
+            <p class="muted">{{ selectedArticle.publisher }} · Matéria em foco</p>
+            <a :href="selectedArticle.url" target="_blank" rel="noopener noreferrer">{{ selectedArticle.title }} ↗</a>
+          </div>
+          <button class="text-button" :disabled="chatLoading" @click="selectedArticle = null">Remover</button>
+        </div>
+        <p v-if="chatError" class="notice error" role="alert">{{ chatError }}</p>
+        <form class="composer" @submit.prevent="sendQuestion(question)">
+          <textarea ref="input" v-model="question" rows="2" maxlength="2000" aria-label="Sua pergunta"
+            placeholder="Pergunte sobre as notícias…" @keydown.enter="handleEnter" />
+          <button class="primary-button" :disabled="chatLoading || !question.trim()" type="submit">
+            {{ chatLoading ? 'Enviando…' : 'Enviar' }}
+          </button>
+        </form>
+        <div class="index-tools">
+          <button class="text-button" :disabled="syncing" @click="syncIndex">
+            {{ syncing ? 'Atualizando índice…' : 'Atualizar índice de busca' }}
+          </button>
+          <span v-if="syncStatus" :class="{ error: syncFailed }" role="status">{{ syncStatus }}</span>
+        </div>
+      </div>
     </main>
   </div>
 </template>
