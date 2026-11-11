@@ -11,8 +11,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/chat': 'http://localhost:8000',
-      '/ingest': 'http://localhost:8000',
+      '/auth/config': 'http://127.0.0.1:8000',
+      '/news': 'http://127.0.0.1:8000',
+      '/chat': 'http://127.0.0.1:8000',
+      '/ingest': 'http://127.0.0.1:8000',
     },
   },
 })

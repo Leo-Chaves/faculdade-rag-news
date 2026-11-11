@@ -30,17 +30,17 @@
       </div>
 
       <!-- Sources -->
-      <div v-if="message.sources && message.sources.length" class="sources">
-        <span class="sources-label">Fontes:</span>
+      <div v-if="links.length" class="sources">
+        <span class="sources-label">Matérias da BBC</span>
         <a
-          v-for="src in message.sources"
-          :key="src"
-          :href="src"
+          v-for="article in links"
+          :key="article.url"
+          :href="article.url"
           target="_blank"
           rel="noopener noreferrer"
           class="source-link"
         >
-          {{ formatSource(src) }}
+          {{ article.title }} ↗
         </a>
       </div>
     </div>
@@ -48,21 +48,29 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from "vue";
+
+const props = defineProps({
   message: {
     type: Object,
     required: true,
-    // shape: { id, role: 'user'|'assistant', content, sources?, isLoading? }
   },
 });
 
-function formatSource(url) {
+function isWebLink(url) {
   try {
-    return new URL(url).hostname;
+    return ['https:', 'http:'].includes(new URL(url).protocol);
   } catch {
-    return url;
+    return false;
   }
 }
+
+const links = computed(() => {
+  const articles = props.message.articles?.length
+    ? props.message.articles
+    : (props.message.sources || []).map((url) => ({ url, title: url }));
+  return articles.filter((article) => isWebLink(article.url));
+});
 </script>
 
 <style scoped>
@@ -131,7 +139,7 @@ function formatSource(url) {
 }
 .bubble.user {
   background: var(--color-user-bubble);
-  border: 1px solid rgba(124, 58, 237, 0.3);
+  border: 1px solid var(--color-border);
   border-bottom-right-radius: 4px;
   color: var(--color-text-primary);
 }
@@ -183,17 +191,20 @@ function formatSource(url) {
 /* Sources */
 .sources {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.35rem;
-  align-items: center;
+  align-items: flex-start;
+  padding: .4rem 0;
 }
 .sources-label {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--color-text-muted);
 }
 .source-link {
-  font-size: 0.7rem;
-  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  color: var(--color-accent-light);
+  overflow-wrap: anywhere;
   text-decoration: none;
   transition: color 0.15s;
 }

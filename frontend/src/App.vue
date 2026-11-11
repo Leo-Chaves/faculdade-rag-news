@@ -1,659 +1,329 @@
-<template>
-  <div class="app-shell">
-    <!-- Sidebar -->
-    <ChatSidebar :loading="isLoading" :is-open="isSidebarOpen" @quick-question="handleQuickQuestion" />
-
-    <!-- Mobile Overlay -->
-    <transition name="fade">
-      <div v-if="isSidebarOpen" class="mobile-overlay" @click="isSidebarOpen = false"></div>
-    </transition>
-
-    <!-- Disclaimer Modal -->
-    <transition name="fade">
-      <div v-if="showDisclaimer" class="modal-overlay" @click.self="closeDisclaimer">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h3>⚠️ Aviso de Limitações Técnicas</h3>
-            <button class="close-btn" @click="closeDisclaimer">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-          </div>
-          <div class="modal-body">
-            <p>
-              Este projeto está hospedado no plano gratuito do <strong>Render</strong>, que possui um limite estrito de memória RAM (512MB).
-            </p>
-            <p>
-              Para que o sistema funcione sem estourar o limite de memória, tivemos que adotar um <strong>modelo de busca (Embeddings) mais leve e focado no inglês</strong>.
-            </p>
-            <p>
-              <strong>O que isso significa na prática?</strong><br>
-              As pesquisas no banco de dados de notícias terão resultados bem mais precisos e relevantes quando você fizer <strong>perguntas relacionadas às notícias em Inglês</strong>.
-            </p>
-          </div>
-          <div class="modal-footer">
-            <button class="primary-btn" @click="closeDisclaimer">Entendi</button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- Main chat area -->
-    <main class="chat-main">
-      <!-- Header -->
-      <header class="chat-header">
-        <div class="header-info">
-          <button class="icon-btn mobile-menu-btn" title="Menu" @click="isSidebarOpen = !isSidebarOpen">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
-          </button>
-          <h1 class="header-title">Chat com Notícias</h1>
-        </div>
-        <div class="header-actions">
-          <button class="icon-btn" :title="isDarkMode ? 'Modo Claro' : 'Modo Escuro'" @click="toggleTheme">
-            <svg v-if="!isDarkMode" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-            </svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="5"></circle>
-              <line x1="12" y1="1" x2="12" y2="3"></line>
-              <line x1="12" y1="21" x2="12" y2="23"></line>
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-              <line x1="1" y1="12" x2="3" y2="12"></line>
-              <line x1="21" y1="12" x2="23" y2="12"></line>
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-            </svg>
-          </button>
-          <button class="icon-btn" title="Limpar conversa" @click="clearChat">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14H6L5 6" />
-              <path d="M10 11v6M14 11v6" />
-              <path d="M9 6V4h6v2" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      <!-- Messages -->
-      <section ref="messagesContainer" class="messages-area">
-        <!-- Empty state -->
-        <div v-if="messages.length === 0" class="empty-state">
-          <div class="empty-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </div>
-          <h2 class="empty-title">Como posso ajudar?</h2>
-          <p class="empty-sub">
-            Faça uma pergunta sobre as notícias ingeridas ou use o menu para acessar as <strong>Perguntas Rápidas</strong>.
-          </p>
-        </div>
-
-        <!-- Message list -->
-        <div class="messages-list">
-          <ChatMessage v-for="msg in messages" :key="msg.id" :message="msg" />
-        </div>
-      </section>
-
-      <!-- Error banner -->
-      <transition name="fade">
-        <div v-if="errorMessage" class="error-banner">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="error-icon">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          {{ errorMessage }}
-        </div>
-      </transition>
-
-      <!-- Input area -->
-      <footer class="input-area">
-        <div class="input-wrapper">
-          <textarea
-            id="chat-input"
-            ref="inputRef"
-            v-model="inputText"
-            class="chat-input"
-            placeholder="Pergunte sobre as notícias..."
-            rows="1"
-            :disabled="isLoading"
-            @keydown.enter.prevent="handleEnter"
-            @input="autoResize"
-          />
-          <button
-            id="send-btn"
-            class="send-btn"
-            :disabled="!inputText.trim() || isLoading"
-            @click="sendMessage(inputText)"
-          >
-            <svg v-if="!isLoading" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z" />
-            </svg>
-            <span v-else class="spinner" />
-          </button>
-        </div>
-        <p class="input-hint">Enter: enviar · Shift+Enter: quebrar linha</p>
-      </footer>
-    </main>
-  </div>
-</template>
-
 <script setup>
-import { ref, nextTick, onMounted } from "vue";
-import axios from "axios";
-import ChatSidebar from "./components/ChatSidebar.vue";
-import ChatMessage from "./components/ChatMessage.vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { createClient } from '@supabase/supabase-js'
+import axios from 'axios'
+import AuthForm from './components/AuthForm.vue'
+import ChatMessage from './components/ChatMessage.vue'
+import NewsCard from './components/NewsCard.vue'
 
-// ─── State ────────────────────────────────────────────────────────────────────
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '', timeout: 15000 })
+const client = shallowRef(null)
+const session = shallowRef(null)
+const initializing = ref(true)
+const authError = ref('')
+let authSubscription
+let accountRequests = new AbortController()
 
-const messages = ref([]);
-const inputText = ref("");
-const isLoading = ref(false);
-const errorMessage = ref("");
-const messagesContainer = ref(null);
-const inputRef = ref(null);
+const view = ref('news')
+const news = ref([])
+const category = ref('')
+const pageSize = ref(7)
+const newsLoading = ref(false)
+const newsError = ref('')
+const categories = computed(() => [...new Set(news.value.map((article) => article.category))])
+const filteredNews = computed(() =>
+  category.value ? news.value.filter((article) => article.category === category.value) : news.value,
+)
+const visibleNews = computed(() => filteredNews.value.slice(0, pageSize.value))
 
-const isDarkMode = ref(false);
-const isSidebarOpen = ref(false);
-const showDisclaimer = ref(false);
+const messages = ref([])
+const question = ref('')
+const selectedArticle = ref(null)
+const chatLoading = ref(false)
+const chatError = ref('')
+const input = ref(null)
+const messageList = ref(null)
+let nextMessageId = 0
 
-onMounted(() => {
-  const savedTheme = localStorage.getItem('theme');
-  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-    isDarkMode.value = true;
-    document.documentElement.classList.add('dark');
-  }
+const syncing = ref(false)
+const syncStatus = ref('')
+const syncFailed = ref(false)
+const dark = ref(localStorage.getItem('theme') === 'dark')
 
-  // Verifica se o usuário já fechou o aviso anteriormente
-  if (!localStorage.getItem('disclaimer_seen')) {
-    showDisclaimer.value = true;
-  }
-});
+watch(dark, (value) => {
+  document.documentElement.classList.toggle('dark', value)
+  localStorage.setItem('theme', value ? 'dark' : 'light')
+}, { immediate: true })
 
-function closeDisclaimer() {
-  showDisclaimer.value = false;
-  localStorage.setItem('disclaimer_seen', 'true');
+function detail(error, fallback) {
+  const message = error.response?.data?.detail
+  return typeof message === 'string' ? message : fallback
 }
 
-let msgCounter = 0;
-const uid = () => ++msgCounter;
+async function request(config) {
+  const signal = accountRequests.signal
+  const { data } = await client.value.auth.getSession()
+  signal.throwIfAborted()
+  if (!data.session) throw new Error('Sessão encerrada.')
+  const response = await api.request({
+    ...config,
+    signal,
+    headers: { Authorization: `Bearer ${data.session.access_token}` },
+  })
+  return response.data
+}
 
-// ─── Actions ──────────────────────────────────────────────────────────────────
-
-function toggleTheme() {
-  isDarkMode.value = !isDarkMode.value;
-  if (isDarkMode.value) {
-    document.documentElement.classList.add('dark');
-    localStorage.setItem('theme', 'dark');
-  } else {
-    document.documentElement.classList.remove('dark');
-    localStorage.setItem('theme', 'light');
+async function initialize() {
+  initializing.value = true
+  authError.value = ''
+  try {
+    const { data } = await api.get('/auth/config')
+    client.value = createClient(data.url, data.key)
+    const { data: listener } = client.value.auth.onAuthStateChange((_event, currentSession) => {
+      session.value = currentSession
+      initializing.value = false
+    })
+    authSubscription = listener.subscription
+  } catch (error) {
+    authError.value = detail(error, 'Não foi possível conectar ao serviço de login.')
+    initializing.value = false
   }
 }
 
-function handleQuickQuestion(text) {
-  isSidebarOpen.value = false;
-  sendMessage(text);
+onMounted(initialize)
+onUnmounted(() => {
+  authSubscription?.unsubscribe()
+  accountRequests.abort()
+})
+
+watch(() => session.value?.user.id, (userId) => {
+  accountRequests.abort()
+  accountRequests = new AbortController()
+  news.value = []
+  category.value = ''
+  pageSize.value = 7
+  newsError.value = ''
+  newsLoading.value = false
+  syncing.value = false
+  syncStatus.value = ''
+  chatLoading.value = false
+  resetChat()
+  view.value = 'news'
+  if (userId) loadNews()
+})
+
+async function signOut() {
+  authError.value = ''
+  const { error } = await client.value.auth.signOut({ scope: 'local' })
+  if (error) authError.value = 'Não foi possível sair. Tente novamente.'
 }
 
-async function sendMessage(text) {
-  const question = (typeof text === "string" ? text : inputText.value).trim();
-  if (!question || isLoading.value) return;
+async function loadNews() {
+  const signal = accountRequests.signal
+  newsLoading.value = true
+  newsError.value = ''
+  try {
+    const articles = await request({ url: '/news' })
+    if (signal.aborted) return
+    news.value = articles
+    if (!categories.value.includes(category.value)) category.value = ''
+  } catch (error) {
+    if (!signal.aborted) newsError.value = detail(error, 'Não foi possível carregar as manchetes.')
+  } finally {
+    if (!signal.aborted) newsLoading.value = false
+  }
+}
 
-  errorMessage.value = "";
-  inputText.value = "";
-  resetTextareaHeight();
+function filterNews(topic) {
+  category.value = topic
+  pageSize.value = 7
+}
 
-  // Push user message
-  messages.value.push({ id: uid(), role: "user", content: question });
+async function openArticle(article) {
+  if (chatLoading.value) return
+  if (selectedArticle.value?.url !== article.url) resetChat()
+  selectedArticle.value = article
+  view.value = 'chat'
+  await nextTick()
+  input.value?.focus()
+}
 
-  // Push loading placeholder for assistant
-  const loadingMsg = { id: uid(), role: "assistant", content: "", isLoading: true };
-  messages.value.push(loadingMsg);
-  await scrollToBottom();
+function resetChat() {
+  messages.value = []
+  selectedArticle.value = null
+  question.value = ''
+  chatError.value = ''
+}
 
-  isLoading.value = true;
+async function scrollChat() {
+  await nextTick()
+  if (messageList.value) messageList.value.scrollTop = messageList.value.scrollHeight
+}
+
+async function sendQuestion(text) {
+  const trimmed = text.trim()
+  if (!trimmed || chatLoading.value) return
+
+  const signal = accountRequests.signal
+  const article = selectedArticle.value
+  chatLoading.value = true
+  chatError.value = ''
+  question.value = ''
+  const userMessageId = ++nextMessageId
+  messages.value.push({ id: userMessageId, role: 'user', content: trimmed })
+  const id = ++nextMessageId
+  messages.value.push({ id, role: 'assistant', isLoading: true })
+  scrollChat()
 
   try {
-    const { data } = await axios.post("/chat", { question });
-    // Replace loading placeholder with real answer
-    const idx = messages.value.findIndex((m) => m.id === loadingMsg.id);
-    if (idx !== -1) {
-      messages.value[idx] = {
-        id: loadingMsg.id,
-        role: "assistant",
-        content: data.answer,
-        sources: data.sources || [],
-        isLoading: false,
-      };
-    }
-  } catch (err) {
-    // Remove loading placeholder and show error
-    messages.value = messages.value.filter((m) => m.id !== loadingMsg.id);
-    errorMessage.value =
-      "Erro ao obter resposta: " +
-      (err.response?.data?.detail || err.message || "Tente novamente.");
-    setTimeout(() => (errorMessage.value = ""), 5000);
+    const data = await request({
+      url: '/chat',
+      method: 'POST',
+      timeout: 120000,
+      data: { question: trimmed, article_url: article?.url },
+    })
+    if (signal.aborted) return
+    messages.value = messages.value.map((message) => message.id === id
+      ? { id, role: 'assistant', content: data.answer, articles: data.articles, sources: data.sources }
+      : message)
+  } catch (error) {
+    if (signal.aborted) return
+    messages.value = messages.value.filter((message) => message.id !== id && message.id !== userMessageId)
+    question.value = trimmed
+    chatError.value = detail(error, 'Não foi possível obter a resposta. Tente novamente.')
   } finally {
-    isLoading.value = false;
-    await scrollToBottom();
-    inputRef.value?.focus();
+    if (!signal.aborted) {
+      chatLoading.value = false
+      await scrollChat()
+      input.value?.focus()
+    }
   }
 }
 
-function clearChat() {
-  messages.value = [];
-  errorMessage.value = "";
+async function syncIndex() {
+  const signal = accountRequests.signal
+  syncing.value = true
+  syncStatus.value = ''
+  syncFailed.value = false
+  try {
+    const result = await request({ url: '/ingest', method: 'POST', timeout: 120000 })
+    if (signal.aborted) return
+    syncStatus.value = result.articles_processed
+      ? `${result.articles_processed} matérias adicionadas ao índice.`
+      : 'O índice já contém as matérias atuais.'
+  } catch (error) {
+    if (signal.aborted) return
+    syncFailed.value = true
+    syncStatus.value = detail(error, 'Não foi possível atualizar o índice.')
+  } finally {
+    if (!signal.aborted) syncing.value = false
+  }
 }
 
 function handleEnter(event) {
-  if (event.shiftKey) return; // allow newline
-  sendMessage(inputText.value);
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function scrollToBottom() {
-  await nextTick();
-  const el = messagesContainer.value;
-  if (el) el.scrollTop = el.scrollHeight;
-}
-
-function autoResize(event) {
-  const ta = event.target;
-  ta.style.height = "auto";
-  ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
-}
-
-function resetTextareaHeight() {
-  if (inputRef.value) inputRef.value.style.height = "auto";
+  if (event.shiftKey || event.isComposing) return
+  event.preventDefault()
+  sendQuestion(question.value)
 }
 </script>
 
-<style scoped>
-/* ── Shell ───────────────────────────────────────────────────────────────── */
-.app-shell {
-  display: flex;
-  height: 100dvh;
-  overflow: hidden;
-  background: var(--color-bg-primary);
-  position: relative;
-}
+<template>
+  <main v-if="initializing || !session" class="auth-page">
+    <div class="auth-brand">
+      <span class="brand-mark" aria-hidden="true">R</span>
+      <span>RAG News</span>
+    </div>
+    <section class="auth-panel" aria-label="Acesso ao RAG News">
+      <p v-if="initializing" role="status">Carregando…</p>
+      <template v-else-if="authError">
+        <h1>Entre na sua conta</h1>
+        <p class="notice error" role="alert">{{ authError }}</p>
+        <button class="primary-button" @click="initialize">Tentar novamente</button>
+      </template>
+      <AuthForm v-else :client="client" />
+    </section>
+  </main>
 
-.mobile-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
-  z-index: 40;
-}
+  <div v-else class="workspace">
+    <aside class="navigation">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">R</span>
+        <span>RAG News</span>
+      </div>
+      <nav aria-label="Navegação principal">
+        <button :aria-current="view === 'news' ? 'page' : undefined" @click="view = 'news'">Manchetes</button>
+        <button :aria-current="view === 'chat' ? 'page' : undefined" @click="view = 'chat'">Chat</button>
+      </nav>
+      <div class="account">
+        <p class="account-email" :title="session.user.email">{{ session.user.email }}</p>
+        <div class="account-actions">
+          <button class="text-button" @click="dark = !dark">{{ dark ? 'Tema claro' : 'Tema escuro' }}</button>
+          <button class="text-button" @click="signOut">Sair</button>
+        </div>
+        <p v-if="authError" class="error" role="alert">{{ authError }}</p>
+      </div>
+    </aside>
 
-/* ── Modal ───────────────────────────────────────────────────────────────── */
-.modal-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(3px);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-}
+    <main v-if="view === 'news'" class="main-content">
+      <header class="page-header">
+        <div>
+          <h1>Últimas da BBC</h1>
+          <p class="muted">Escolha uma manchete para ler ou conversar sobre ela.</p>
+        </div>
+        <button class="secondary-button" :disabled="newsLoading" @click="loadNews">
+          {{ newsLoading ? 'Atualizando…' : 'Atualizar manchetes' }}
+        </button>
+      </header>
+      <p v-if="newsError" class="notice error" role="alert">{{ newsError }}</p>
+      <p v-else-if="newsLoading && !news.length" class="notice" role="status">Buscando manchetes da BBC…</p>
+      <p v-else-if="!news.length" class="notice">Nenhuma manchete disponível.</p>
+      <template v-if="news.length">
+        <div class="topic-filters" aria-label="Filtrar manchetes por tema">
+          <button :aria-pressed="!category" @click="filterNews('')">Todas</button>
+          <button v-for="topic in categories" :key="topic" :aria-pressed="category === topic"
+            @click="filterNews(topic)">{{ topic }}</button>
+        </div>
+        <div class="news-grid">
+          <NewsCard v-for="(article, index) in visibleNews" :key="article.url" :article="article"
+            :featured="index === 0" :chat-busy="chatLoading" @ask="openArticle" />
+        </div>
+        <button v-if="filteredNews.length > pageSize" class="secondary-button more-news"
+          @click="pageSize += 6">Mostrar mais notícias</button>
+      </template>
+    </main>
 
-.modal-content {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 480px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
+    <main v-else class="main-content chat-page">
+      <header class="page-header">
+        <div>
+          <h1>Chat com notícias</h1>
+          <p class="muted">Faça uma pergunta sobre as matérias da BBC.</p>
+        </div>
+        <button class="secondary-button" :disabled="chatLoading" @click="resetChat">Nova conversa</button>
+      </header>
 
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-secondary);
-}
+      <div v-if="selectedArticle" class="selected-article">
+        <div>
+          <p class="muted">Matéria em foco</p>
+          <a :href="selectedArticle.url" target="_blank" rel="noopener noreferrer">{{ selectedArticle.title }} ↗</a>
+        </div>
+        <button class="text-button" :disabled="chatLoading" @click="selectedArticle = null">Remover</button>
+      </div>
+      <div v-else class="index-tools">
+        <button class="text-button" :disabled="syncing" @click="syncIndex">
+          {{ syncing ? 'Atualizando índice…' : 'Atualizar índice de busca' }}
+        </button>
+        <span v-if="syncStatus" :class="{ error: syncFailed }" role="status">{{ syncStatus }}</span>
+      </div>
 
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  color: var(--color-text-primary);
-}
+      <section ref="messageList" class="conversation" aria-label="Conversa" role="log">
+        <ChatMessage v-for="message in messages" :key="message.id" :message="message" />
+        <div v-if="!messages.length" class="chat-empty">
+          <p>{{ selectedArticle ? 'Quer entender melhor esta matéria?' : 'O que você quer descobrir?' }}</p>
+          <button v-if="selectedArticle" class="secondary-button" @click="sendQuestion('Resuma esta matéria em português.')">
+            Resumir esta matéria
+          </button>
+          <button v-else class="secondary-button" @click="view = 'news'">Escolher uma manchete</button>
+        </div>
+      </section>
 
-.close-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 0;
-  display: flex;
-}
-
-.close-btn:hover {
-  color: var(--color-text-primary);
-}
-
-.modal-body {
-  padding: 1.5rem;
-  font-size: 0.95rem;
-  line-height: 1.6;
-  color: var(--color-text-secondary);
-}
-
-.modal-body p {
-  margin-top: 0;
-  margin-bottom: 1rem;
-}
-
-.modal-body p:last-child {
-  margin-bottom: 0;
-}
-
-.modal-body strong {
-  color: var(--color-text-primary);
-}
-
-.modal-footer {
-  padding: 1rem 1.5rem;
-  border-top: 1px solid var(--color-border);
-  display: flex;
-  justify-content: flex-end;
-  background: var(--color-bg-secondary);
-}
-
-.primary-btn {
-  background: var(--color-accent);
-  color: white;
-  border: none;
-  padding: 0.6rem 1.2rem;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.primary-btn:hover {
-  opacity: 0.9;
-}
-
-/* ── Main ────────────────────────────────────────────────────────────────── */
-.chat-main {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  height: 100%;
-  overflow: hidden;
-}
-
-/* ── Header ──────────────────────────────────────────────────────────────── */
-.chat-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-secondary);
-  flex-shrink: 0;
-}
-.header-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-.icon-btn.mobile-menu-btn {
-  display: none; /* hidden on desktop */
-}
-.header-title {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  letter-spacing: -0.02em;
-}
-.header-badge {
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-secondary);
-  background: var(--color-bg-card);
-  padding: 2px 8px;
-  border-radius: 99px;
-  border: 1px solid var(--color-border);
-}
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.icon-btn:hover {
-  border-color: var(--color-text-muted);
-  color: var(--color-text-primary);
-  background: var(--color-bg-primary);
-}
-.icon-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* ── Messages ─────────────────────────────────────────────────────────────── */
-.messages-area {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  scroll-behavior: smooth;
-}
-.messages-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  width: 100%;
-  align-items: center;
-}
-
-/* Empty state */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  text-align: center;
-  gap: 0.75rem;
-  padding: 2rem;
-  color: var(--color-text-secondary);
-}
-.empty-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  color: var(--color-accent-light);
-}
-.empty-icon svg {
-  width: 32px;
-  height: 32px;
-}
-.empty-title {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-.empty-sub {
-  margin: 0;
-  font-size: 0.85rem;
-  max-width: 360px;
-  line-height: 1.6;
-}
-
-/* ── Error banner ─────────────────────────────────────────────────────────── */
-.error-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0 1.5rem 0.5rem;
-  padding: 0.6rem 1rem;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 8px;
-  color: #f87171;
-  font-size: 0.82rem;
-  flex-shrink: 0;
-}
-.error-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-/* ── Input area ───────────────────────────────────────────────────────────── */
-.input-area {
-  padding: 1rem 1.5rem 1.25rem;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg-secondary);
-  flex-shrink: 0;
-}
-.input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 0.5rem 0.5rem 0.5rem 1rem;
-  transition: border-color 0.2s;
-}
-.input-wrapper:focus-within {
-  border-color: var(--color-text-muted);
-}
-.chat-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  resize: none;
-  color: var(--color-text-primary);
-  font-size: 0.9rem;
-  font-family: "Inter", sans-serif;
-  line-height: 1.5;
-  max-height: 140px;
-  overflow-y: auto;
-}
-.chat-input::placeholder {
-  color: var(--color-text-muted);
-}
-.chat-input:disabled {
-  opacity: 0.6;
-}
-.send-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  align-self: flex-end;
-  background: var(--color-accent);
-  border: none;
-  border-radius: 6px;
-  color: white;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: opacity 0.2s ease;
-}
-.send-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-.send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  transform: none;
-}
-.send-btn svg {
-  width: 18px;
-  height: 18px;
-}
-.input-hint {
-  margin: 0.4rem 0 0;
-  font-size: 0.68rem;
-  color: var(--color-text-muted);
-  text-align: right;
-}
-
-/* Spinner */
-.spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ── Responsive ───────────────────────────────────────────────────────────── */
-@media (max-width: 768px) {
-  .icon-btn.mobile-menu-btn {
-    display: flex;
-  }
-  .header-badge {
-    display: none; /* Hide badge on very small screens to save space */
-  }
-  .chat-header {
-    padding: 0.8rem 1rem;
-  }
-  .messages-area {
-    padding: 1rem 0.5rem;
-  }
-  .input-area {
-    padding: 0.75rem;
-  }
-}
-</style>
+      <p v-if="chatError" class="notice error" role="alert">{{ chatError }}</p>
+      <form class="composer" @submit.prevent="sendQuestion(question)">
+        <textarea ref="input" v-model="question" rows="2" maxlength="2000" aria-label="Sua pergunta"
+          placeholder="Escreva sua pergunta…" @keydown.enter="handleEnter" />
+        <button class="primary-button" :disabled="chatLoading || !question.trim()" type="submit">
+          {{ chatLoading ? 'Enviando…' : 'Enviar' }}
+        </button>
+      </form>
+    </main>
+  </div>
+</template>
